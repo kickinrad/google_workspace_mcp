@@ -14,6 +14,7 @@ from core.server import server
     "name",
     [
         "send_gmail_message",
+        "delete_gmail_draft",
         "manage_document_comment",
         "manage_spreadsheet_comment",
         "manage_presentation_comment",

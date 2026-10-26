@@ -4,7 +4,7 @@ MCP tools for Gmail message search, sending, drafting, labels, and filters. All 
 
 ## Contents
 - Search & Read: search_gmail_messages, get_gmail_message_content, get_gmail_messages_content_batch, get_gmail_thread_content, get_gmail_threads_content_batch, get_gmail_attachment_content
-- Send & Draft: send_gmail_message, draft_gmail_message
+- Send & Draft: send_gmail_message, draft_gmail_message, delete_gmail_draft
 - Label Management: list_gmail_labels, manage_gmail_label, modify_gmail_message_labels, batch_modify_gmail_message_labels
 - Filter Management: list_gmail_filters, manage_gmail_filter
 - Tips
@@ -114,7 +114,7 @@ Send an email. Supports new messages, replies, forwards, HTML, attachments, CC/B
 - **Base64 content**: `{"content": "base64data", "filename": "doc.pdf"}` -- optionally add `"mime_type"` (must be standard base64, not urlsafe)
 
 ### draft_gmail_message
-Create a draft. Same capabilities as send (including forwards and reply_all).
+Create a draft or replace an existing draft in place. Same compose capabilities as send (including forwards and reply_all).
 
 | Parameter | Type | Required | Default | Notes |
 |-----------|------|----------|---------|-------|
@@ -137,8 +137,17 @@ Create a draft. Same capabilities as send (including forwards and reply_all).
 | include_signature | boolean | no | true | Append Gmail signature if available |
 | reply_all | boolean | no | false | Derive recipients from the thread: To = sender being replied to, Cc = other participants (minus you and from_email). Requires thread_id; explicit to/cc win |
 | quote_original | boolean | no | false | Include original message as quoted reply (requires thread_id) |
+| draft_id | string | no | | Existing draft ID to replace in place. Supply the complete revised message, including thread_id and attachments to retain them. Cannot be combined with forward_message_id |
 
 Operational Gmail settings errors such as rate limits abort draft creation instead of silently falling back to a potentially unintended sender.
+
+### delete_gmail_draft
+Permanently delete one draft by its ID without sending it.
+
+| Parameter | Type | Required | Default | Notes |
+|-----------|------|----------|---------|-------|
+| user_google_email | string | yes | | |
+| draft_id | string | yes | | Draft ID returned by draft_gmail_message |
 
 ---
 
@@ -256,7 +265,7 @@ Create, delete, update, or apply a filter. Update recreates the filter (Gmail ha
 - Use label IDs (not names) in `modify_gmail_message_labels`, `batch_modify_gmail_message_labels`, and filter actions.
 
 ### Drafts vs Send
-- Use `draft_gmail_message` when you want the user to review before sending. It supports `include_signature` (auto-appends Gmail signature) and `quote_original` (includes quoted reply text).
+- Use `draft_gmail_message` when you want the user to review before sending. Pass its returned `draft_id` to replace that draft in place; include the full revised message. It supports `include_signature` (auto-appends Gmail signature) and `quote_original` (includes quoted reply text).
 - Use `send_gmail_message` for immediate delivery.
 - To forward, pass `forward_message_id` to either tool; the original subject, quoted body and (by default) attachments are carried over, and `body` becomes an optional note.
 

@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 import gmail.gmail_tools as gmail_tools
 from core.utils import UserInputError
 from gmail.gmail_tools import (
+    delete_gmail_draft,
     draft_gmail_message,
     send_gmail_message,
     _resolve_url_attachments,
@@ -173,6 +174,93 @@ def _default_alias_send_as_response():
             },
         ]
     }
+
+
+@pytest.mark.asyncio
+async def test_draft_gmail_message_updates_in_place_with_compose_features():
+    service = _mock_gmail_service()
+    service.users().drafts().update().execute.return_value = {"id": "draft123"}
+    service.users().settings().sendAs().list().execute.return_value["sendAs"][0][
+        "signature"
+    ] = "<div>Regards</div>"
+
+    result = await _unwrap(draft_gmail_message)(
+        service=service,
+        user_google_email="user@example.com",
+        draft_id="draft123",
+        to="recipient@example.com",
+        subject="Re: Meeting",
+        body="<p>Revised</p>",
+        body_format="html",
+        thread_id="thread123",
+        in_reply_to="<parent@example.com>",
+        references="<parent@example.com>",
+        attachments=[
+            {"content": base64.b64encode(b"report").decode(), "filename": "report.txt"}
+        ],
+    )
+
+    assert result == "Draft updated with 1 attachment(s)! Draft ID: draft123"
+    service.users().drafts().create.assert_not_called()
+    kwargs = service.users().drafts().update.call_args.kwargs
+    assert kwargs["userId"] == "me"
+    assert kwargs["id"] == "draft123"
+    assert kwargs["body"]["message"]["threadId"] == "thread123"
+    message = _parse_raw_message(kwargs["body"]["message"]["raw"])
+    assert message["In-Reply-To"] == "<parent@example.com>"
+    assert message["References"] == "<parent@example.com>"
+    assert "Revised" in str(message)
+    assert "Regards" in str(message)
+    assert "report.txt" in str(message)
+
+
+@pytest.mark.asyncio
+async def test_draft_gmail_message_rejects_forward_update_without_creating_draft():
+    service = _mock_gmail_service()
+
+    with pytest.raises(UserInputError, match="forward_message_id"):
+        await _unwrap(draft_gmail_message)(
+            service=service,
+            user_google_email="user@example.com",
+            draft_id="draft123",
+            forward_message_id="message123",
+        )
+
+    service.users().drafts().create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_draft_gmail_message_rejects_blank_draft_id_without_creating_draft():
+    service = _mock_gmail_service()
+
+    with pytest.raises(UserInputError, match="draft_id"):
+        await _unwrap(draft_gmail_message)(
+            service=service,
+            user_google_email="user@example.com",
+            draft_id=" ",
+            to="recipient@example.com",
+            subject="Revision",
+            body="Revised text",
+        )
+
+    service.users().drafts().create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_gmail_draft_deletes_only_selected_id():
+    service = _mock_gmail_service()
+
+    result = await _unwrap(delete_gmail_draft)(
+        service=service,
+        user_google_email="user@example.com",
+        draft_id="draft123",
+    )
+
+    assert result == "Draft deleted! Draft ID: draft123"
+    service.users().drafts().delete.assert_called_once_with(userId="me", id="draft123")
+    service.users().drafts().delete().execute.assert_called_once_with(
+        num_retries=gmail_tools.GOOGLE_API_WRITE_RETRIES
+    )
 
 
 @pytest.mark.asyncio
