@@ -3506,7 +3506,10 @@ async def draft_gmail_message(
     """
     _reject_entity_escaped_html_body(body, body_format)
 
-    if draft_id and forward_message_id:
+    if draft_id is not None and not draft_id.strip():
+        raise UserInputError("'draft_id' must not be blank.")
+
+    if draft_id is not None and forward_message_id:
         raise UserInputError("'draft_id' cannot be combined with 'forward_message_id'.")
 
     if forward_message_id:
@@ -3687,7 +3690,7 @@ async def draft_gmail_message(
     drafts = service.users().drafts()
     request = (
         drafts.update(userId="me", id=draft_id, body=draft_body)
-        if draft_id
+        if draft_id is not None
         else drafts.create(userId="me", body=draft_body)
     )
     saved_draft = await asyncio.to_thread(
@@ -3698,7 +3701,7 @@ async def draft_gmail_message(
     attachment_info = _format_attachment_result(
         attached_count, requested_attachment_count
     )
-    action = "updated" if draft_id else "created"
+    action = "updated" if draft_id is not None else "created"
     return f"Draft {action}{attachment_info}! Draft ID: {saved_draft_id}"
 
 

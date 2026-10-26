@@ -230,6 +230,23 @@ async def test_draft_gmail_message_rejects_forward_update_without_creating_draft
 
 
 @pytest.mark.asyncio
+async def test_draft_gmail_message_rejects_blank_draft_id_without_creating_draft():
+    service = _mock_gmail_service()
+
+    with pytest.raises(UserInputError, match="draft_id"):
+        await _unwrap(draft_gmail_message)(
+            service=service,
+            user_google_email="user@example.com",
+            draft_id=" ",
+            to="recipient@example.com",
+            subject="Revision",
+            body="Revised text",
+        )
+
+    service.users().drafts().create.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_delete_gmail_draft_deletes_only_selected_id():
     service = _mock_gmail_service()
 
