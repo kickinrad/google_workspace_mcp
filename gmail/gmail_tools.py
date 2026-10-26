@@ -3368,11 +3368,17 @@ async def draft_gmail_message(
             description="Whether to derive reply-all recipients from the thread: To = the sender being replied to, Cc = the other participants, excluding the authenticated account and from_email. Requires thread_id. Explicit to/cc win; when cc is omitted the sender being replied to is added to the derived Cc if they are not already in To. Defaults to false.",
         ),
     ] = False,
+    draft_id: Annotated[
+        Optional[str],
+        Field(
+            description="Existing Gmail draft ID to replace in place. Supply the complete revised message, including thread_id and attachments to retain them. Omit to create a new draft.",
+        ),
+    ] = None,
 ) -> str:
     """
-    Creates a draft email in the user's Gmail account. Supports new, reply, and forward
-    drafts with optional attachments. Supports Gmail's "Send As" feature to draft from
-    configured alias addresses.
+    Creates or replaces a draft email in the user's Gmail account. Supports new,
+    reply, and forward drafts with optional attachments. Supports Gmail's "Send As"
+    feature to draft from configured alias addresses.
 
     To save a forward as a draft for review, pass forward_message_id. The original
     subject, body (quoted with a "Forwarded message" header), and attachments are
@@ -3436,9 +3442,12 @@ async def draft_gmail_message(
             account and from_email. Requires thread_id. Explicit to/cc win over the derived
             values; when cc is omitted, the sender being replied to is added to the derived Cc
             unless they are already in To.
+        draft_id (Optional[str]): Existing draft ID to replace in place. Pass the complete
+            revised message, including thread_id and attachments to retain them. Cannot
+            be combined with forward_message_id.
 
     Returns:
-        str: Confirmation message with the created draft's ID.
+        str: Confirmation message with the created or updated draft's ID.
 
     Examples:
         # Create a new draft
@@ -3496,6 +3505,11 @@ async def draft_gmail_message(
         )
     """
     _reject_entity_escaped_html_body(body, body_format)
+
+    if draft_id and forward_message_id:
+        raise UserInputError(
+            "'draft_id' cannot be combined with 'forward_message_id'."
+        )
 
     if forward_message_id:
         # Resolve and validate the identity, and take its Gmail-web From
@@ -3672,16 +3686,46 @@ async def draft_gmail_message(
     if thread_id and in_reply_to and references:
         draft_body["message"]["threadId"] = thread_id
 
-    # Create the draft
-    created_draft = await asyncio.to_thread(
-        service.users().drafts().create(userId="me", body=draft_body).execute,
+    drafts = service.users().drafts()
+    request = (
+        drafts.update(userId="me", id=draft_id, body=draft_body)
+        if draft_id
+        else drafts.create(userId="me", body=draft_body)
+    )
+    saved_draft = await asyncio.to_thread(
+        request.execute,
         num_retries=GOOGLE_API_WRITE_RETRIES,
     )
-    draft_id = created_draft.get("id")
+    saved_draft_id = saved_draft.get("id")
     attachment_info = _format_attachment_result(
         attached_count, requested_attachment_count
     )
-    return f"Draft created{attachment_info}! Draft ID: {draft_id}"
+    action = "updated" if draft_id else "created"
+    return f"Draft {action}{attachment_info}! Draft ID: {saved_draft_id}"
+
+
+@server.tool(
+    title="Delete Gmail Draft",
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
+@handle_http_errors("delete_gmail_draft", service_type="gmail")
+@require_google_service("gmail", GMAIL_COMPOSE_SCOPE)
+async def delete_gmail_draft(
+    service,
+    user_google_email: str,
+    draft_id: Annotated[str, Field(description="ID of the Gmail draft to delete.")],
+) -> str:
+    """Permanently delete a Gmail draft by ID without sending it."""
+    await asyncio.to_thread(
+        service.users().drafts().delete(userId="me", id=draft_id).execute,
+        num_retries=GOOGLE_API_WRITE_RETRIES,
+    )
+    return f"Draft deleted! Draft ID: {draft_id}"
 
 
 def _format_thread_content(
