@@ -195,7 +195,9 @@ async def test_draft_gmail_message_updates_in_place_with_compose_features():
         thread_id="thread123",
         in_reply_to="<parent@example.com>",
         references="<parent@example.com>",
-        attachments=[{"content": base64.b64encode(b"report").decode(), "filename": "report.txt"}],
+        attachments=[
+            {"content": base64.b64encode(b"report").decode(), "filename": "report.txt"}
+        ],
     )
 
     assert result == "Draft updated with 1 attachment(s)! Draft ID: draft123"
@@ -238,9 +240,7 @@ async def test_delete_gmail_draft_deletes_only_selected_id():
     )
 
     assert result == "Draft deleted! Draft ID: draft123"
-    service.users().drafts().delete.assert_called_once_with(
-        userId="me", id="draft123"
-    )
+    service.users().drafts().delete.assert_called_once_with(userId="me", id="draft123")
     service.users().drafts().delete().execute.assert_called_once_with(
         num_retries=gmail_tools.GOOGLE_API_WRITE_RETRIES
     )

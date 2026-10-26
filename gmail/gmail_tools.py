@@ -3507,9 +3507,7 @@ async def draft_gmail_message(
     _reject_entity_escaped_html_body(body, body_format)
 
     if draft_id and forward_message_id:
-        raise UserInputError(
-            "'draft_id' cannot be combined with 'forward_message_id'."
-        )
+        raise UserInputError("'draft_id' cannot be combined with 'forward_message_id'.")
 
     if forward_message_id:
         # Resolve and validate the identity, and take its Gmail-web From
